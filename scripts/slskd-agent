@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+REAL_SCRIPT="$(readlink -f "$0" 2>/dev/null || readlink "$0" 2>/dev/null || echo "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+PYTHONPATH="$SCRIPT_DIR" exec python3 -m slskd_agent.cli "$@"
