@@ -5,15 +5,38 @@ import urllib.parse
 import urllib.error
 
 class SlskdClient:
-    def __init__(self, api_url=None, api_key=None):
+    def __init__(self, api_url=None, api_key=None, username=None, password=None):
         url = api_url or os.environ.get("SLSKD_API_URL") or "http://127.0.0.1:5030/api/v0"
         key = api_key or os.environ.get("SLSKD_API_KEY") or "LrL7I2k2jMJu7Xc1QX0JcDtgqq0ZP1YzGNy75DYLi8X"
         self.api_url = url.rstrip('/')
         self.api_key = key
+        # Username/password (SLSKD_USERNAME / SLSKD_PASSWORD) log in for a bearer token and win over the API key.
+        self.username = username or os.environ.get("SLSKD_USERNAME")
+        self.password = password or os.environ.get("SLSKD_PASSWORD")
+        self._token = None
+
+    def _login(self):
+        res = self._send("POST", "/session", {"username": self.username, "password": self.password}, {})
+        self._token = res.get("token") if isinstance(res, dict) else None
+
+    def _auth_headers(self):
+        if self.username and self.password:
+            if not self._token:
+                self._login()
+            if self._token:
+                return {"Authorization": f"Bearer {self._token}"}
+        return {"X-API-Key": self.api_key}
 
     def request(self, method, path, data=None):
+        res = self._send(method, path, data, self._auth_headers())
+        if self._token and isinstance(res, dict) and res.get("code") == 401:  # token expired
+            self._token = None
+            res = self._send(method, path, data, self._auth_headers())
+        return res
+
+    def _send(self, method, path, data, auth_headers):
         url = f"{self.api_url}{path}"
-        headers = {"X-API-Key": self.api_key, "Content-Type": "application/json"}
+        headers = {**auth_headers, "Content-Type": "application/json"}
         body = json.dumps(data).encode("utf-8") if data is not None else None
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
